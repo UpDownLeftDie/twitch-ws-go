@@ -2,3 +2,8 @@
 config.yml
 config.yaml
 config.json
+*debug*
+*.exe
+*.db
+migration/*
+!migration/init*.sql

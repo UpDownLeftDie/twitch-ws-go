@@ -1,5 +1,13 @@
 {
   "cSpell.words": [
-    "scclient"
+    "SSLMODE",
+    "csrf",
+    "dbname",
+    "jmoiron",
+    "mattn",
+    "scclient",
+    "sqlite",
+    "sqlx",
+    "updownleftbot"
   ]
 }
