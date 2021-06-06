@@ -7,3 +7,4 @@ config.json
 *.db
 migration/*
 !migration/init*.sql
+twitch-ws-go*

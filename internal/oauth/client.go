@@ -1,4 +1,4 @@
-package twitch
+package oauth
 
 import (
 	"fmt"
@@ -6,17 +6,16 @@ import (
 
 	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/twitch"
 )
 
-func NewOAuthConfig(clientID, clientSecret string) *oauth2.Config {
+func NewOAuthConfig(clientID string, clientSecret string, scopes []string, endpoint oauth2.Endpoint) *oauth2.Config {
 	fmt.Println(viper.GetString("CALLBACK_URL"))
 	oauthConfig := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RedirectURL:  viper.GetString("CALLBACK_URL"),
-		Scopes:       []string{viper.GetString("twitch.scopes")},
-		Endpoint:     twitch.Endpoint,
+		Scopes:       scopes,
+		Endpoint:     endpoint,
 	}
 	return oauthConfig
 }

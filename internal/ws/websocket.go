@@ -1,9 +1,8 @@
-package wsservice
+package ws
 
 import (
 	"log"
 	"os"
-	"os/signal"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -14,12 +13,55 @@ type Ws interface {
 }
 
 type ws struct {
-	conn *websocket.Conn
+	conn      *websocket.Conn
+	done      chan interface{} // Channel to indicate that the receiverHandler is done
+	interrupt chan os.Signal   // Channel to listen for interrupt signal to terminate gracefully
 }
 
-func NewWebsocket(conn *websocket.Conn) ws {
+func NewWebsocketClient(websocketUrl string, done chan interface{}, interrupt chan os.Signal) ws {
+	conn, _, err := websocket.DefaultDialer.Dial(websocketUrl, nil)
+	if err != nil {
+		log.Fatal("Error connecting to Websocket Server:", err)
+	}
+	defer conn.Close()
+	go receiveHandler(conn, done)
+
+	// Our main loop for the client
+	// We send our relevant packets here
+	for {
+		select {
+		case <-time.After(time.Duration(5) * time.Millisecond * 1000):
+			// Send an echo packet every second
+			err := conn.WriteMessage(websocket.TextMessage, []byte("PING"))
+			if err != nil {
+				log.Println("Error during writing to websocket:", err)
+				return ws{}
+			}
+
+		case <-interrupt:
+			// We received a SIGINT (Ctrl + C). Terminate gracefully...
+			log.Println("Received SIGINT interrupt signal. Closing all pending connections")
+
+			// Close our websocket connection
+			err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+			if err != nil {
+				log.Println("Error during closing websocket:", err)
+				return ws{}
+			}
+
+			select {
+			case <-done:
+				log.Println("Receiver Channel Closed! Exiting....")
+			case <-time.After(time.Duration(1) * time.Second):
+				log.Println("Timeout in closing receiving channel. Exiting....")
+			}
+			return ws{}
+		}
+	}
 	return ws{
-		conn: conn,
+		conn,
+		done,
+		interrupt,
 	}
 }
 
@@ -32,10 +74,7 @@ func (w ws) SendMessage(message string) error {
 	return nil
 }
 
-var done chan interface{}    // Channel to indicate that the receiverHandler is done
-var interrupt chan os.Signal // Channel to listen for interrupt signal to terminate gracefully
-
-func receiveHandler(conn *websocket.Conn) {
+func receiveHandler(conn *websocket.Conn, done chan interface{}) {
 	defer close(done)
 	for {
 		_, msg, err := conn.ReadMessage()
@@ -44,52 +83,5 @@ func receiveHandler(conn *websocket.Conn) {
 			return
 		}
 		log.Printf("Received: %s\n", msg)
-	}
-}
-
-func main(websocketUrl string) {
-
-	signal.Notify(interrupt, os.Interrupt) // Notify the interrupt channel for SIGINT
-	done = make(chan interface{})
-	interrupt = make(chan os.Signal)
-
-	conn, _, err := websocket.DefaultDialer.Dial(websocketUrl, nil)
-	if err != nil {
-		log.Fatal("Error connecting to Websocket Server:", err)
-	}
-	defer conn.Close()
-	go receiveHandler(conn)
-
-	// Our main loop for the client
-	// We send our relevant packets here
-	for {
-		select {
-		case <-time.After(time.Duration(5) * time.Millisecond * 1000):
-			// Send an echo packet every second
-			err := conn.WriteMessage(websocket.TextMessage, []byte("PING"))
-			if err != nil {
-				log.Println("Error during writing to websocket:", err)
-				return
-			}
-
-		case <-interrupt:
-			// We received a SIGINT (Ctrl + C). Terminate gracefully...
-			log.Println("Received SIGINT interrupt signal. Closing all pending connections")
-
-			// Close our websocket connection
-			err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-			if err != nil {
-				log.Println("Error during closing websocket:", err)
-				return
-			}
-
-			select {
-			case <-done:
-				log.Println("Receiver Channel Closed! Exiting....")
-			case <-time.After(time.Duration(1) * time.Second):
-				log.Println("Timeout in closing receiving channel. Exiting....")
-			}
-			return
-		}
 	}
 }

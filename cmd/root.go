@@ -12,8 +12,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/updownleftdie/twitch-ws-go/v2/internal/configs"
-	"github.com/updownleftdie/twitch-ws-go/v2/internal/service"
-	"github.com/updownleftdie/twitch-ws-go/v2/internal/service/twitch"
+	"github.com/updownleftdie/twitch-ws-go/v2/internal/oauth"
+	"github.com/updownleftdie/twitch-ws-go/v2/internal/ws"
+	"golang.org/x/oauth2/twitch"
 )
 
 var (
@@ -45,7 +46,8 @@ func Execute() {
 	}
 }
 
-func setup(ctx context.Context) service.Service {
+func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal) (oauth.Service, ws.Ws) {
+	// setup environment variables
 	configs.InitializeViper()
 	setupDefaults()
 
@@ -55,6 +57,7 @@ func setup(ctx context.Context) service.Service {
 		logrus.Panicln("unable to get Hostname", err)
 	}
 
+	// setup logger
 	logrus.SetFormatter(&logrus.JSONFormatter{})
 	logrus.SetLevel(logrus.DebugLevel)
 	logrus.WithFields(logrus.Fields{
@@ -64,6 +67,7 @@ func setup(ctx context.Context) service.Service {
 		"Host":      host,
 	}).Info("Service Startup")
 
+	// setup db
 	db, err := getDB(
 		viper.GetString("DB.HOST"),
 		viper.GetString("DB.PORT"),
@@ -82,14 +86,24 @@ func setup(ctx context.Context) service.Service {
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	twitchOauthConfig := twitch.NewOAuthConfig(
+	// setup oauth
+	twitchOauthConfig := oauth.NewOAuthConfig(
 		viper.GetString("TWITCH.CLIENT_ID"),
 		viper.GetString("TWITCH.CLIENT_SECRET"),
+		[]string{viper.GetString("twitch.scopes")},
+		twitch.Endpoint,
 	)
 
-	twitchRepository := service.NewRepository(db)
-	twitchService := service.NewService(twitchOauthConfig, viper.GetString("TWITCH.BASE_API_URL"), twitchRepository)
-	return twitchService
+	twitchOauthRepository := oauth.NewRepository(db)
+	twitchOauthService := oauth.NewService(twitchOauthConfig, viper.GetString("TWITCH.BASE_API_URL"), twitchOauthRepository)
+
+	// setup websocket clients
+	twitchWebSocketClient := ws.NewWebsocketClient("wss://pubsub-edge.twitch.tv", done, interrupt)
+
+	// setup rest clients
+
+	return twitchOauthService, twitchWebSocketClient
+
 }
 
 func setupDefaults() map[string]interface{} {
@@ -102,7 +116,7 @@ func setupDefaults() map[string]interface{} {
 		"DB.MAX_CONNECTIONS":  5,
 		"DB.SSLMODE":          "disable",
 		"DB.SQLX_DRIVER_NAME": "sqlite3",
-		"DB.SQLITE_FILE":      "db.db",
+		"DB.SQLITE_FILE":      "twitch-ws-go.db",
 
 		"TWITCH.BASE_API_URL": "https://id.twitch.tv",
 		"TWITCH.WS_URL":       "wss://pubsub-edge.twitch.tv",

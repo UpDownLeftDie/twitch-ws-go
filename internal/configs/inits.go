@@ -1,7 +1,7 @@
 package configs
 
 import (
-	"fmt"
+	"log"
 
 	"github.com/spf13/viper"
 )
@@ -21,6 +21,6 @@ func InitializeViper() {
 
 	viper.SetConfigType("yml")
 	if err := viper.ReadInConfig(); err != nil {
-		fmt.Printf("Error reading config file, %s", err)
+		log.Fatalf("Error reading config file, %s", err)
 	}
 }

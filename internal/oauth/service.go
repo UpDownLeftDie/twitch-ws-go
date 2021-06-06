@@ -1,4 +1,4 @@
-package service
+package oauth
 
 import (
 	"context"
@@ -39,7 +39,7 @@ func (s service) AuthorizeCallback(csrfToken, code string) error {
 		return err
 	}
 
-	oauthToken := OauthToken{
+	oauthToken := Token{
 		ClientID:     s.oauthConfig.ClientID,
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,

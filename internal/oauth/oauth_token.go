@@ -1,4 +1,4 @@
-package service
+package oauth
 
 import (
 	"time"
@@ -6,7 +6,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type OauthToken struct {
+type Token struct {
 	ClientID     string    `db:"client_id"`
 	ServiceName  string    `db:"service_name"`
 	AccessToken  string    `db:"access_token"`
@@ -14,7 +14,7 @@ type OauthToken struct {
 	ExpiresAt    time.Time `db:"expires_at"`
 }
 
-func (o OauthToken) Token() *oauth2.Token {
+func (o Token) Token() *oauth2.Token {
 	return &oauth2.Token{
 		AccessToken:  o.AccessToken,
 		RefreshToken: o.RefreshToken,

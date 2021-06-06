@@ -1,4 +1,4 @@
-package service
+package oauth
 
 import (
 	"database/sql"
@@ -9,8 +9,8 @@ import (
 )
 
 type Repository interface {
-	GetOauthTokens() ([]OauthToken, error)
-	UpsertOauthToken(oauthToken OauthToken) error
+	GetOauthTokens() ([]Token, error)
+	UpsertOauthToken(oauthToken Token) error
 }
 
 type repository struct {
@@ -23,8 +23,8 @@ func NewRepository(db *sqlx.DB) repository {
 	}
 }
 
-func (r repository) GetOauthTokens() ([]OauthToken, error) {
-	var oauthTokens []OauthToken
+func (r repository) GetOauthTokens() ([]Token, error) {
+	var oauthTokens []Token
 	err := r.db.Select(
 		&oauthTokens,
 		`SELECT
@@ -42,7 +42,7 @@ func (r repository) GetOauthTokens() ([]OauthToken, error) {
 	return oauthTokens, nil
 }
 
-func (r repository) UpsertOauthToken(oauthToken OauthToken) error {
+func (r repository) UpsertOauthToken(oauthToken Token) error {
 	_, err := r.db.Exec(
 		`INSERT INTO
 			oauth_token (client_id, access_token, refresh_token, expires_at)

@@ -4,8 +4,8 @@ CREATE TABLE oauth_token (
   refresh_token TEXT NOT NULL,
   expires_at TEXT NOT NULL,
 
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP NOT NULL DEFAULT now(),
 
   PRIMARY KEY (client_id)
 );
@@ -15,14 +15,14 @@ CREATE TABLE twitch_viewer(
   username TEXT NOT NULL,
 
   PRIMARY KEY (id)
-)
+);
 
 CREATE TABLE events.twitch (
   id TEXT NOT NULL,
   type TEXT NOT NULL,
   amount TEXT,
 
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT now(),
 
   PRIMARY KEY (id)
 );
