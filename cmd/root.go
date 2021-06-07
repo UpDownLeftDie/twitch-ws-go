@@ -86,7 +86,7 @@ func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	// setup oauth
+	// get oauth tokens
 	twitchOauthConfig := oauth.NewOAuthConfig(
 		viper.GetString("TWITCH.CLIENT_ID"),
 		viper.GetString("TWITCH.CLIENT_SECRET"),
@@ -108,6 +108,7 @@ func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal)
 		twitchWebSocketClient := ws.NewWebsocketClient("wss://pubsub-edge.twitch.tv", twitchOauthToken.ClientID, twitchTopics, done, interrupt)
 
 		// setup rest clients
+		// TODO
 
 		return twitchOauthService, twitchWebSocketClient
 	}
