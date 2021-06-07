@@ -1,7 +1,6 @@
 package oauth
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/spf13/viper"
@@ -9,7 +8,6 @@ import (
 )
 
 func NewOAuthConfig(clientID string, clientSecret string, scopes []string, endpoint oauth2.Endpoint) *oauth2.Config {
-	fmt.Println(viper.GetString("CALLBACK_URL"))
 	oauthConfig := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,

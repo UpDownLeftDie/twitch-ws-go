@@ -90,19 +90,28 @@ func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal)
 	twitchOauthConfig := oauth.NewOAuthConfig(
 		viper.GetString("TWITCH.CLIENT_ID"),
 		viper.GetString("TWITCH.CLIENT_SECRET"),
-		[]string{viper.GetString("twitch.scopes")},
+		viper.GetStringSlice("TWITCH.SCOPES"),
 		twitch.Endpoint,
 	)
 
-	twitchOauthRepository := oauth.NewRepository(db)
+	twitchOauthRepository := oauth.NewRepository(db, twitchOauthConfig)
 	twitchOauthService := oauth.NewService(twitchOauthConfig, viper.GetString("TWITCH.BASE_API_URL"), twitchOauthRepository)
 
-	// setup websocket clients
-	twitchWebSocketClient := ws.NewWebsocketClient("wss://pubsub-edge.twitch.tv", done, interrupt)
+	twitchOauthToken, err := twitchOauthRepository.GetOauthToken()
+	if err != nil {
+		logrus.Error("Error getting twitch token from DB: ", err)
+	} else if twitchOauthToken.ClientID == "" {
+		logrus.Error("No twitch oauth token. Auth first: %s", viper.GetString("CALLBACK_URL"))
+	} else {
+		// setup websocket clients
+		twitchTopics := viper.GetStringSlice("TWITCH.TOPICS")
+		twitchWebSocketClient := ws.NewWebsocketClient("wss://pubsub-edge.twitch.tv", twitchOauthToken.ClientID, twitchTopics, done, interrupt)
 
-	// setup rest clients
+		// setup rest clients
 
-	return twitchOauthService, twitchWebSocketClient
+		return twitchOauthService, twitchWebSocketClient
+	}
+	return twitchOauthService, nil
 
 }
 
@@ -156,3 +165,23 @@ func getDB(host string, port string, user string, password string, dbname string
 		return sqlx.Connect(driverName, strings.Join(pairs, " "))
 	}
 }
+
+//func convertTwitchScopesToTopics(scopes []string, twitchId string) []string {
+//	var topics []string
+//	var twitchTopics = map[string][]string{
+//		"bits:read":                  {"channel-bits-events-v2.%s", "channel-bits-badge-unlocks.%s"},
+//		"channel:read:redemptions":   {"channel-points-channel-v1.%s"},
+//		"channel:read:subscriptions": {"channel-subscribe-events-v1.%s"},
+//		"channel:moderate":           {"chat_moderator_actions.%s.%s", "automod-queue.%s.%s"},
+//		"chat:read":                  {"user-moderation-notifications.%s.%s"},
+//		"whispers:read":              {"whispers.<user ID>"},
+//	}
+//
+//	for i := range scopes {
+//		for j := range twitchTopics[scopes[i]] {
+//			topic := fmt.Sprintf(twitchTopics[scopes[i]][j], twitchId)
+//			topics = append(topics, topic)
+//		}
+//	}
+//	return topics
+//}

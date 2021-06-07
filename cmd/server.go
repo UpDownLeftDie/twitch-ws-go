@@ -24,10 +24,10 @@ var serverCmd = &cobra.Command{
 func runServer(cmd *cobra.Command, args []string) {
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	done := make(chan interface{})
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
 
-	serviceService, _ := setup(ctx, done, c)
+	serviceService, _ := setup(ctx, done, interrupt)
 	mux := oauth.MakeHTTPHandler(serviceService)
 
 	server := &http.Server{
@@ -36,7 +36,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	}
 
 	go func() {
-		for range c {
+		for range interrupt {
 			logrus.Warnln("Interrupt detected, flushing service")
 			server.Shutdown(context.TODO())
 			ctxCancel()

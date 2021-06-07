@@ -3,6 +3,7 @@ package oauth
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -43,6 +44,7 @@ func (s service) AuthorizeCallback(csrfToken, code string) error {
 		ClientID:     s.oauthConfig.ClientID,
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
+		TokenType:    token.TokenType,
 	}
 
 	expiresInFloat := token.Extra("expires_in").(float64)
@@ -51,8 +53,14 @@ func (s service) AuthorizeCallback(csrfToken, code string) error {
 		return errors.New("missing expires_in")
 	}
 	expiresAt := time.Unix(time.Now().Unix()+int64(expiresInFloat), 0)
-
 	oauthToken.ExpiresAt = expiresAt
+
+	scopesRaw := token.Extra("scope").([]interface{})
+	var scopes []string
+	for _, scope := range scopesRaw {
+		scopes = append(scopes, scope.(string))
+	}
+	oauthToken.Scope = "[\"" + strings.Join(scopes, "\", \"") + "\"]"
 
 	err = s.repo.UpsertOauthToken(oauthToken)
 	if err != nil {
