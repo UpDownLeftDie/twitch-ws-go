@@ -1,9 +1,12 @@
 package ws
 
 import (
-	"log"
 	"os"
+	"strconv"
+	"strings"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/gorilla/websocket"
 )
@@ -18,76 +21,79 @@ type ws struct {
 	interrupt chan os.Signal   // Channel to listen for interrupt signal to terminate gracefully
 }
 
-func NewWebsocketClient(websocketUrl string, oauthToken string, topics []string, done chan interface{}, interrupt chan os.Signal) ws {
+func NewWebsocketClient(websocketUrl string, oauthToken string, topics []string, wsReceiveChan chan []byte, done chan interface{}, interrupt chan os.Signal) {
 	conn, _, err := websocket.DefaultDialer.Dial(websocketUrl, nil)
 	if err != nil {
-		log.Fatal("Error connecting to Websocket Server:", err)
+		logrus.Fatal("Error connecting to Websocket Server:", err)
 	}
 	defer conn.Close()
-	go receiveHandler(conn, done)
+	go receiveHandler(conn, wsReceiveChan, done)
 
-	err = conn.WriteJSON(twitchWSOutgoingMessage{Type: "LISTEN", Nonce: "twitchPubSub", Data: authMessageData{AuthToken: oauthToken, Topics: topics}})
+	err = conn.WriteJSON(twitchWSOutgoingMessage{Type: "LISTEN", Nonce: "twitchPubSubNonce", Data: authMessageData{AuthToken: oauthToken, Topics: topics}})
 	if err != nil {
-		log.Println("Error during LISTEN to websocket:", err)
-		return ws{}
+		logrus.Println("Error during LISTEN to websocket:", err)
+		return
 	}
 
 	// Our main loop for the client
 	// We send our relevant packets here
-	for {
-		select {
-		case <-time.After(time.Duration(5) * time.Millisecond * 1000 * 60):
-			// Send an echo packet every second
-			err := conn.WriteJSON(twitchWSOutgoingMessage{Type: "PING"})
-			if err != nil {
-				log.Println("Error during writing to websocket:", err)
-				return ws{}
-			}
-
-		case <-interrupt:
-			// We received a SIGINT (Ctrl + C). Terminate gracefully...
-			log.Println("Received SIGINT interrupt signal. Closing all pending connections")
-
-			// Close our websocket connection
-			err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-			if err != nil {
-				log.Println("Error during closing websocket:", err)
-				return ws{}
-			}
-
+	go func() {
+		for {
 			select {
-			case <-done:
-				log.Println("Receiver Channel Closed! Exiting....")
-			case <-time.After(time.Duration(1) * time.Second):
-				log.Println("Timeout in closing receiving channel. Exiting....")
+			case <-time.After(time.Duration(5) * time.Millisecond * 1000 * 60):
+				// Send an echo packet every second
+				err := conn.WriteJSON(twitchWSOutgoingMessage{Type: "PING"})
+				if err != nil {
+					logrus.Println("Error during writing to websocket:", err)
+					return
+				}
+
+			case <-interrupt:
+				// We received a SIGINT (Ctrl + C). Terminate gracefully...
+				logrus.Println("Received SIGINT interrupt signal. Closing all pending connections")
+
+				// Close our websocket connection
+				//err := conn.WriteJSON(twitchWSOutgoingMessage{Type: "DISCONNECT"})
+				err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+				if err != nil {
+					logrus.Println("Error during closing websocket:", err)
+					return
+				}
+
+				select {
+				case <-done:
+					logrus.Println("Receiver Channel Closed! Exiting....")
+					return
+				case <-time.After(time.Duration(5) * time.Second):
+					logrus.Println("Timeout in closing receiving channel. Exiting....")
+					return
+				}
 			}
-			return ws{}
 		}
-	}
-	return ws{
-		conn,
-		done,
-		interrupt,
-	}
+	}()
 }
 
 func (w ws) SendMessage(message string) error {
 	err := w.conn.WriteMessage(websocket.TextMessage, []byte(message))
 	if err != nil {
-		log.Println("Error during writing to websocket:", err)
+		logrus.Println("Error during writing to websocket:", err)
 		return err
 	}
 	return nil
 }
 
-func receiveHandler(conn *websocket.Conn, done chan interface{}) {
+func receiveHandler(conn *websocket.Conn, wsReceiveChan chan []byte, done chan interface{}) {
 	defer close(done)
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("Error in receive:", err)
+			if strings.Contains(err.Error(), strconv.Itoa(websocket.CloseNormalClosure)) || strings.Contains(err.Error(), strconv.Itoa(websocket.ClosePolicyViolation)) {
+				return
+			}
+			logrus.Println("Error in receive:", err)
 			return
 		}
-		log.Printf("Received: %s\n", msg)
+		wsReceiveChan <- msg
+		//fmt.Printf("inside receiveHandler: %s", msg)
 	}
 }

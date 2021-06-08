@@ -27,7 +27,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	serviceService, _ := setup(ctx, done, interrupt)
+	serviceService := setup(ctx, done, interrupt)
 	mux := oauth.MakeHTTPHandler(serviceService)
 
 	server := &http.Server{

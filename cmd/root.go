@@ -7,14 +7,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/updownleftdie/twitch-ws-go/v2/internal/oauth"
+
+	"github.com/updownleftdie/twitch-ws-go/v2/internal/twitch"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/updownleftdie/twitch-ws-go/v2/internal/configs"
-	"github.com/updownleftdie/twitch-ws-go/v2/internal/oauth"
-	"github.com/updownleftdie/twitch-ws-go/v2/internal/ws"
-	"golang.org/x/oauth2/twitch"
 )
 
 var (
@@ -46,7 +47,7 @@ func Execute() {
 	}
 }
 
-func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal) (oauth.Service, ws.Ws) {
+func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal) oauth.Service {
 	// setup environment variables
 	configs.InitializeViper()
 	setupDefaults()
@@ -86,34 +87,12 @@ func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	// get oauth tokens
-	twitchOauthConfig := oauth.NewOAuthConfig(
-		viper.GetString("TWITCH.CLIENT_ID"),
-		viper.GetString("TWITCH.CLIENT_SECRET"),
-		viper.GetStringSlice("TWITCH.SCOPES"),
-		twitch.Endpoint,
-	)
-
-	twitchOauthRepository := oauth.NewRepository(db, twitchOauthConfig)
-	twitchOauthService := oauth.NewService(twitchOauthConfig, viper.GetString("TWITCH.BASE_API_URL"), twitchOauthRepository)
-
-	twitchOauthToken, err := twitchOauthRepository.GetOauthToken()
+	twitchOauthService, err := twitch.NewTwitchClient(db, done, interrupt)
 	if err != nil {
-		logrus.Error("Error getting twitch token from DB: ", err)
-	} else if twitchOauthToken.ClientID == "" {
-		logrus.Error("No twitch oauth token. Auth first: %s", viper.GetString("CALLBACK_URL"))
-	} else {
-		// setup websocket clients
-		twitchTopics := viper.GetStringSlice("TWITCH.TOPICS")
-		twitchWebSocketClient := ws.NewWebsocketClient("wss://pubsub-edge.twitch.tv", twitchOauthToken.ClientID, twitchTopics, done, interrupt)
-
-		// setup rest clients
-		// TODO
-
-		return twitchOauthService, twitchWebSocketClient
+		logrus.Error("Error creating TwitchClient", err)
 	}
-	return twitchOauthService, nil
 
+	return twitchOauthService
 }
 
 func setupDefaults() map[string]interface{} {
