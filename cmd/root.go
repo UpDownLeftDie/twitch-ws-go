@@ -7,8 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/updownleftdie/twitch-ws-go/v2/internal/oauth"
-
 	"github.com/updownleftdie/twitch-ws-go/v2/internal/twitch"
 
 	"github.com/jmoiron/sqlx"
@@ -38,6 +36,10 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+type Clients struct {
+	twitchClient *twitch.Client
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
@@ -47,7 +49,7 @@ func Execute() {
 	}
 }
 
-func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal) oauth.Service {
+func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal) Clients {
 	// setup environment variables
 	configs.InitializeViper()
 	setupDefaults()
@@ -87,12 +89,14 @@ func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	twitchOauthService, err := twitch.NewTwitchClient(db, done, interrupt)
+	twitchClient, err := twitch.NewTwitchClient(db, done, interrupt)
 	if err != nil {
 		logrus.Error("Error creating TwitchClient", err)
 	}
 
-	return twitchOauthService
+	return Clients{
+		twitchClient,
+	}
 }
 
 func setupDefaults() map[string]interface{} {

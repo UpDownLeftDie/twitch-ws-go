@@ -19,6 +19,8 @@ type Token struct {
 func (o Token) Token() *oauth2.Token {
 	return &oauth2.Token{
 		AccessToken:  o.AccessToken,
+		TokenType:    o.TokenType,
 		RefreshToken: o.RefreshToken,
+		Expiry:       o.ExpiresAt,
 	}
 }

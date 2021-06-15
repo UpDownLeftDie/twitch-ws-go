@@ -2,8 +2,9 @@ package oauth
 
 import (
 	"database/sql"
-	"golang.org/x/oauth2"
 	"time"
+
+	"golang.org/x/oauth2"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
@@ -61,11 +62,11 @@ func (r repository) UpsertOauthToken(oauthToken Token) error {
 			($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (client_id)
 		DO UPDATE SET
-			access_token = $2,
-			refresh_token = $3,
-		    scope = $4,
-		    token_type = $5,
-			expires_at = $6,
+			access_token = coalesce($2, access_token),
+			refresh_token = coalesce($3, refresh_token),
+			scope = coalesce($4, scope),
+			token_type = coalesce($5, token_type),
+			expires_at = coalesce($6, expires_at),
 			updated_at = CURRENT_TIMESTAMP`, // ! change this if using different db driver TODO: detect user config?
 		oauthToken.ClientID,
 		oauthToken.AccessToken,

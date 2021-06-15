@@ -27,8 +27,8 @@ func runServer(cmd *cobra.Command, args []string) {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	serviceService := setup(ctx, done, interrupt)
-	mux := oauth.MakeHTTPHandler(serviceService)
+	clients := setup(ctx, done, interrupt)
+	mux := oauth.MakeHTTPHandler(clients.twitchClient.TwitchOauthService)
 
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", viper.GetInt("PORT")),
@@ -38,6 +38,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	go func() {
 		for range interrupt {
 			logrus.Warnln("Interrupt detected, flushing service")
+			clients.twitchClient.TwitchWsConn.Close()
 			server.Shutdown(context.TODO())
 			ctxCancel()
 		}

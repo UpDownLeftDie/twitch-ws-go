@@ -21,18 +21,13 @@ type ws struct {
 	interrupt chan os.Signal   // Channel to listen for interrupt signal to terminate gracefully
 }
 
-func NewWebsocketClient(websocketUrl string, oauthToken string, topics []string, wsReceiveChan chan []byte, done chan interface{}, interrupt chan os.Signal) {
-	conn, _, err := websocket.DefaultDialer.Dial(websocketUrl, nil)
-	if err != nil {
-		logrus.Fatal("Error connecting to Websocket Server:", err)
-	}
-	defer conn.Close()
+func NewWebsocketClient(conn *websocket.Conn, oauthToken string, topics []string, wsReceiveChan chan []byte, done chan interface{}, interrupt chan os.Signal) error {
 	go receiveHandler(conn, wsReceiveChan, done)
 
-	err = conn.WriteJSON(twitchWSOutgoingMessage{Type: "LISTEN", Nonce: "twitchPubSubNonce", Data: authMessageData{AuthToken: oauthToken, Topics: topics}})
+	err := conn.WriteJSON(twitchWSOutgoingMessage{Type: "LISTEN", Nonce: "twitchPubSubNonce", Data: authMessageData{AuthToken: oauthToken, Topics: topics}})
 	if err != nil {
 		logrus.Println("Error during LISTEN to websocket:", err)
-		return
+		return err
 	}
 
 	// Our main loop for the client
@@ -40,7 +35,7 @@ func NewWebsocketClient(websocketUrl string, oauthToken string, topics []string,
 	go func() {
 		for {
 			select {
-			case <-time.After(time.Duration(5) * time.Millisecond * 1000 * 60):
+			case <-time.After(time.Duration(5) * time.Millisecond * 1000):
 				// Send an echo packet every second
 				err := conn.WriteJSON(twitchWSOutgoingMessage{Type: "PING"})
 				if err != nil {
@@ -71,6 +66,8 @@ func NewWebsocketClient(websocketUrl string, oauthToken string, topics []string,
 			}
 		}
 	}()
+
+	return nil
 }
 
 func (w ws) SendMessage(message string) error {
