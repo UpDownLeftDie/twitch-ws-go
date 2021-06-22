@@ -2,15 +2,11 @@ package cmd
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
-	"github.com/updownleftdie/twitch-ws-go/v2/internal/oauth"
 )
 
 // serverCmd represents the server command
@@ -28,23 +24,14 @@ func runServer(cmd *cobra.Command, args []string) {
 	signal.Notify(interrupt, os.Interrupt)
 
 	clients := setup(ctx, done, interrupt)
-	mux := oauth.MakeHTTPHandler(clients.twitchClient.TwitchOauthService)
-
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", viper.GetInt("PORT")),
-		Handler: mux,
-	}
 
 	go func() {
 		for range interrupt {
 			logrus.Warnln("Interrupt detected, flushing service")
-			clients.twitchClient.TwitchWsConn.Close()
-			server.Shutdown(context.TODO())
+			clients.TwitchClient.TwitchWsConn.Close()
 			ctxCancel()
 		}
 	}()
-
-	server.ListenAndServe()
 }
 
 func init() {

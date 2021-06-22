@@ -2,7 +2,10 @@ package oauth
 
 import (
 	"database/sql"
+	"strings"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"golang.org/x/oauth2"
 
@@ -13,7 +16,7 @@ import (
 
 type Repository interface {
 	GetOauthToken() (Token, error)
-	UpsertOauthToken(oauthToken Token) error
+	UpsertOauthToken(token *oauth2.Token, clientID string) error
 }
 
 type repository struct {
@@ -54,7 +57,29 @@ func (r repository) GetOauthToken() (Token, error) {
 	return oauthToken, nil
 }
 
-func (r repository) UpsertOauthToken(oauthToken Token) error {
+func (r repository) UpsertOauthToken(token *oauth2.Token, clientID string) error {
+	oauthToken := Token{
+		ClientID:     clientID,
+		AccessToken:  token.AccessToken,
+		RefreshToken: token.RefreshToken,
+		TokenType:    token.TokenType,
+	}
+
+	expiresInFloat := token.Extra("expires_in").(float64)
+	if expiresInFloat < 0 {
+		logrus.Error("invalid oauth code exchange, no expires_in")
+		return errors.New("missing expires_in")
+	}
+	expiresAt := time.Unix(time.Now().Unix()+int64(expiresInFloat), 0)
+	oauthToken.ExpiresAt = expiresAt
+
+	scopesRaw := token.Extra("scope").([]interface{})
+	var scopes []string
+	for _, scope := range scopesRaw {
+		scopes = append(scopes, scope.(string))
+	}
+	oauthToken.Scope = "[\"" + strings.Join(scopes, "\", \"") + "\"]"
+
 	_, err := r.db.Exec(
 		`INSERT INTO
 			oauth_token (client_id, access_token, refresh_token, scope, token_type, expires_at)

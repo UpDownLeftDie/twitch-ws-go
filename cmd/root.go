@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/updownleftdie/twitch-ws-go/v2/internal/twitch"
@@ -37,7 +38,8 @@ var rootCmd = &cobra.Command{
 }
 
 type Clients struct {
-	twitchClient *twitch.Client
+	TwitchClient *twitch.Client
+	//streamLabsClient *streamLabs.Client
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -89,10 +91,17 @@ func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	twitchClient, err := twitch.NewTwitchClient(db, done, interrupt)
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	twitchClient, err := twitch.NewTwitchClient(&wg, db, done, interrupt)
 	if err != nil {
 		logrus.Error("Error creating TwitchClient", err)
+	} else {
+		go twitchClient.HandleWSMessages()
 	}
+
+	wg.Wait()
 
 	return Clients{
 		twitchClient,

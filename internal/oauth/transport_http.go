@@ -7,10 +7,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func MakeHTTPHandler(service Service) *http.ServeMux {
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func MakeHTTPHandler(service Service, responseCode *int) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// TODO use real csrf token
 		url := service.AuthCodeURL("state-csrf-todo")
 		http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 	})
@@ -19,11 +25,13 @@ func MakeHTTPHandler(service Service) *http.ServeMux {
 		err := service.AuthorizeCallback(r.FormValue("state"), r.FormValue("code"))
 		if err != nil {
 			logrus.WithError(err).Error("failed to process authorize callback")
-			fmt.Fprintf(w, "Failed!")
+			*responseCode = http.StatusInternalServerError
+			fmt.Fprintf(w, "Failed! Try again.")
 			return
 		}
 
-		fmt.Fprintf(w, "Success!")
+		*responseCode = http.StatusOK
+		fmt.Fprintf(w, "Success! You can close this window.")
 	})
 
 	return mux

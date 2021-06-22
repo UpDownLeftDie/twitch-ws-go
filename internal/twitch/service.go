@@ -3,8 +3,9 @@ package twitch
 import (
 	"context"
 	"fmt"
-	"log"
+	"net/http"
 	"os"
+	"sync"
 
 	"github.com/gorilla/websocket"
 	"github.com/jmoiron/sqlx"
@@ -16,23 +17,24 @@ import (
 )
 
 type Client struct {
-	TwitchOauthService oauth.Service
-	TwitchWsConn       *websocket.Conn
-	WsReceiveChan      chan []byte
+	TwitchWsConn  *websocket.Conn
+	wsReceiveChan chan []byte
 }
 
-func NewTwitchClient(db *sqlx.DB, done chan interface{}, interrupt chan os.Signal) (*Client, error) {
+func NewTwitchClient(wg *sync.WaitGroup, db *sqlx.DB, done chan interface{}, interrupt chan os.Signal) (*Client, error) {
+	defer wg.Done()
 	wsReceiveChan := make(chan []byte)
 	twitchClient, err := setup(db, wsReceiveChan, done, interrupt)
 	if err != nil {
 		return &Client{}, err
 	}
-	go twitchClient.handleWSMessages()
 	return &twitchClient, nil
 }
 
 func setup(db *sqlx.DB, wsReceiveChan chan []byte, done chan interface{}, interrupt chan os.Signal) (Client, error) {
-	// get oauth tokens
+	var twitchWsConn *websocket.Conn
+
+	// get oauth token
 	twitchOauthConfig := oauth.NewOAuthConfig(
 		viper.GetString("TWITCH.CLIENT_ID"),
 		viper.GetString("TWITCH.CLIENT_SECRET"),
@@ -42,50 +44,69 @@ func setup(db *sqlx.DB, wsReceiveChan chan []byte, done chan interface{}, interr
 
 	twitchOauthRepository := oauth.NewRepository(db, twitchOauthConfig)
 	twitchOauthService := oauth.NewService(twitchOauthConfig, viper.GetString("TWITCH.BASE_API_URL"), twitchOauthRepository)
-
 	twitchOauthToken, err := twitchOauthRepository.GetOauthToken()
-	var twitchWsConn *websocket.Conn
 	if err != nil {
 		logrus.Error("Error getting twitch token from DB: ", err)
 		return Client{}, err
 	} else if twitchOauthToken.ClientID == "" {
-		logrus.Errorf("No twitch oauth token. Auth first: %s", viper.GetString("CALLBACK_URL"))
-	} else {
-		tokenSource := twitchOauthConfig.TokenSource(context.Background(), twitchOauthToken.Token())
-		newToken, err := tokenSource.Token()
-		if err != nil {
-			logrus.Fatalln(err)
-		}
-		if newToken.AccessToken != twitchOauthToken.AccessToken {
-			twitchOauthRepository.UpsertOauthToken(oauth.Token{
-				ClientID:     twitchOauthConfig.ClientID,
-				AccessToken:  newToken.AccessToken,
-				RefreshToken: newToken.RefreshToken,
-				TokenType:    newToken.TokenType,
-			})
-			log.Println("Saved new token:", newToken.AccessToken)
-		}
+		port := viper.GetInt("PORT")
+		logrus.Errorf("No twitch oauth token. Auth first: http://localhost:%d", port)
+		var responseCode int
+		mux := oauth.MakeHTTPHandler(twitchOauthService, &responseCode)
 
-		// setup websocket clients
-		twitchTopics := viper.GetStringSlice("TWITCH.TOPICS")
-		twitchWsConn, _, err := websocket.DefaultDialer.Dial("wss://pubsub-edge.twitch.tv", nil)
-		if err != nil {
-			logrus.Fatal("Error connecting to Websocket Server:", err)
+		oauthServer := &http.Server{
+			Addr:    fmt.Sprintf(":%d", port),
+			Handler: mux,
 		}
-		ws.NewWebsocketClient(twitchWsConn, twitchOauthToken.AccessToken, twitchTopics, wsReceiveChan, done, interrupt)
-
-		// setup rest clients
-		// TODO
+		go oauthServer.ListenAndServe()
+		for responseCode != http.StatusOK {
+			select {
+			case <-interrupt:
+				return Client{}, nil
+			default:
+			}
+		}
+		oauthServer.Shutdown(context.Background())
+		twitchOauthToken, err = twitchOauthRepository.GetOauthToken()
+		if err != nil {
+			logrus.Error("Error getting twitch token from DB: ", err)
+			return Client{}, err
+		}
 	}
+
+	tokenSource := twitchOauthConfig.TokenSource(context.Background(), twitchOauthToken.Token())
+	newToken, err := tokenSource.Token()
+	if err != nil {
+		logrus.Fatalln(err)
+	}
+	if newToken.AccessToken != twitchOauthToken.AccessToken {
+		err = twitchOauthRepository.UpsertOauthToken(newToken, twitchOauthConfig.ClientID)
+		if err != nil {
+			logrus.Errorln("Error updating Twitch token: ", err)
+		} else {
+			logrus.Printf("Twitch token updated! (%s...)", newToken.AccessToken[0:5])
+		}
+	}
+
+	// setup websocket clients
+	twitchTopics := viper.GetStringSlice("TWITCH.TOPICS")
+	twitchWsConn, _, err = websocket.DefaultDialer.Dial("wss://pubsub-edge.twitch.tv", nil)
+	if err != nil {
+		logrus.Fatal("Error connecting to Websocket Server:", err)
+	}
+	ws.NewWebsocketClient(twitchWsConn, twitchOauthToken.AccessToken, twitchTopics, wsReceiveChan, done, interrupt)
+
+	// setup rest clients
+	// TODO
+
 	return Client{
-		twitchOauthService,
 		twitchWsConn,
 		wsReceiveChan,
 	}, nil
 }
 
-func (tw Client) handleWSMessages() {
-	msg := <-tw.WsReceiveChan
+func (tw Client) HandleWSMessages() {
+	msg := <-tw.wsReceiveChan
 	fmt.Printf("Received Twitch message: %s\n", string(msg))
 	//logrus.Printf("Received Twitch message: %s\n", string(msg))
 }
