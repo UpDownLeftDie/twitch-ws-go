@@ -1,4 +1,4 @@
-package ws
+package websocket
 
 type twitchWSOutgoingMessage struct {
 	Type  string          `json:"type"`
