@@ -50,7 +50,7 @@ func Execute() {
 	}
 }
 
-func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal) *Clients {
+func setup(ctx context.Context) (*Clients, error) {
 	// setup environment variables
 	configs.InitializeViper()
 	setupDefaults()
@@ -59,6 +59,7 @@ func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal)
 	host, err = os.Hostname()
 	if err != nil {
 		logrus.Panicln("unable to get Hostname", err)
+		return nil, err
 	}
 
 	// setup logger
@@ -85,19 +86,21 @@ func setup(ctx context.Context, done chan interface{}, interrupt chan os.Signal)
 	)
 	if err != nil {
 		logrus.Panicln("unable to connect to DB", err)
+		return nil, err
 	}
 	db.SetMaxOpenConns(viper.GetInt("DB.MAX_CONNECTIONS"))
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	twitchClient, err := twitch.NewTwitchClient(db, done, interrupt)
+	twitchClient, err := twitch.NewTwitchClient(db)
 	if err != nil {
-		logrus.Error("Error creating TwitchClient", err)
+		logrus.Error("Error creating TwitchClient: ", err)
+		return nil, err
 	}
 
 	return &Clients{
 		twitchClient,
-	}
+	}, nil
 }
 
 func setupDefaults() map[string]interface{} {

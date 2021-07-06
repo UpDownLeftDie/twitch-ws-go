@@ -4,7 +4,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func (tc Client) Start() {
+func (tc Client) Start(wsEvents chan []byte) {
 	logrus.Println("Starting Twitch Client...")
 	go func() {
 		for {
@@ -17,7 +17,7 @@ func (tc Client) Start() {
 }
 
 func (tc Client) getWSMessage() string {
-	msg := <-tc.wsReceiveChan
+	msg := <-tc.receiveChan
 	logrus.Debugf("Received Twitch message: %s\n", string(msg))
 	return string(msg)
 }

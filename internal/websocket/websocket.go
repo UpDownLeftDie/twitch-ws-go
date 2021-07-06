@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -15,24 +14,22 @@ import (
 //	SendMessage(message string) error
 //}
 
-type websocket struct {
-	conn      *gorillaWs.Conn
-	done      chan interface{} // Channel to indicate that the receiverHandler is done
-	interrupt chan os.Signal   // Channel to listen for interrupt signal to terminate gracefully
+type Websocket struct {
+	conn *gorillaWs.Conn
 }
 
-func NewWebsocketClient(conn *gorillaWs.Conn, oauthToken string, topics []string, wsReceiveChan chan []byte) error {
-	go receiveHandler(conn, wsReceiveChan)
+func NewWebsocketClient(conn *gorillaWs.Conn, oauthToken string, topics []string, receiveChan chan []byte) (*Websocket, error) {
+	go receiveHandler(conn, receiveChan)
 
 	err := conn.WriteJSON(twitchWSOutgoingMessage{Type: "LISTEN", Nonce: "twitchPubSubNonce", Data: authMessageData{AuthToken: oauthToken, Topics: topics}})
 	if err != nil {
 		logrus.Println("Error during LISTEN to websocket:", err)
-		return err
+		return &Websocket{}, err
 	}
 
 	// Our main loop for the client
 	// We send our relevant packets here
-	go func() {
+	go func() error {
 		for {
 			select {
 			case <-time.After(time.Duration(5) * time.Millisecond * 1000):
@@ -40,16 +37,16 @@ func NewWebsocketClient(conn *gorillaWs.Conn, oauthToken string, topics []string
 				err := conn.WriteJSON(twitchWSOutgoingMessage{Type: "PING"})
 				if err != nil {
 					logrus.Println("Error during writing to websocket:", err)
-					return
+					return err
 				}
 			}
 		}
 	}()
 
-	return nil
+	return &Websocket{conn}, nil
 }
 
-func (ws websocket) SendMessage(message string) error {
+func (ws Websocket) SendMessage(message string) error {
 	err := ws.conn.WriteMessage(gorillaWs.TextMessage, []byte(message))
 	if err != nil {
 		logrus.Println("Error during writing to websocket:", err)
@@ -58,7 +55,7 @@ func (ws websocket) SendMessage(message string) error {
 	return nil
 }
 
-func receiveHandler(conn *gorillaWs.Conn, wsReceiveChan chan []byte) {
+func receiveHandler(conn *gorillaWs.Conn, receiveChan chan []byte) {
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
@@ -68,12 +65,12 @@ func receiveHandler(conn *gorillaWs.Conn, wsReceiveChan chan []byte) {
 			logrus.Println("Error in receive:", err)
 			return
 		}
-		wsReceiveChan <- msg
+		receiveChan <- msg
 		//fmt.Printf("inside receiveHandler: %s", msg)
 	}
 }
 
-func (ws websocket) Stop(done chan interface{}) {
+func (ws Websocket) Stop() {
 	// We received a SIGINT (Ctrl + C). Terminate gracefully...
 	logrus.Println("Received SIGINT interrupt signal. Closing all pending connections")
 
@@ -81,16 +78,10 @@ func (ws websocket) Stop(done chan interface{}) {
 	//err := conn.WriteJSON(twitchWSOutgoingMessage{Type: "DISCONNECT"})
 	err := ws.conn.WriteMessage(gorillaWs.CloseMessage, gorillaWs.FormatCloseMessage(gorillaWs.CloseNormalClosure, ""))
 	if err != nil {
-		logrus.Println("Error during closing websocket:", err)
+		logrus.Println("Error during closing websocket: ", err)
 		return
 	}
-
-	select {
-	case <-done:
-		logrus.Println("Receiver Channel Closed! Exiting....")
-		return
-	case <-time.After(time.Duration(5) * time.Second):
-		logrus.Println("Timeout in closing receiving channel. Exiting....")
-		return
-	}
+	logrus.Println("Timeout in closing receiving channel. Exiting....")
+	ws.conn.Close()
+	return
 }

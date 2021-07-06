@@ -18,21 +18,25 @@ var serverCmd = &cobra.Command{
 }
 
 type Service interface {
-	Start()
-	Stop(done chan interface{})
+	Start(wsEvents chan []byte)
+	Stop()
 }
 
 func runServer(cmd *cobra.Command, args []string) {
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	done := make(chan interface{})
-	defer close(done)
+	wsEvents := make(chan []byte)
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	clients := setup(ctx, done, interrupt)
+	clients, err := setup(ctx)
+	if err != nil {
+		logrus.Error("Failed to start server: ", err)
+		os.Exit(1)
+	}
 	services := []Service{clients.TwitchClient}
 	for _, service := range services {
-		go service.Start()
+		go service.Start(wsEvents)
 	}
 
 	go func() {
@@ -42,13 +46,23 @@ func runServer(cmd *cobra.Command, args []string) {
 				for range interrupt {
 					logrus.Warnln("Interrupt detected, flushing service")
 					for _, service := range services {
-						service.Stop(done)
+						service.Stop()
 					}
 					ctxCancel()
+					done <- "done"
 				}
 			}
 		}
 	}()
+
+	for {
+		select {
+		case <-done:
+			close(done)
+			os.Exit(0)
+		}
+	}
+
 }
 
 func init() {

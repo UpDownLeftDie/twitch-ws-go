@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 
 	gorillaWs "github.com/gorilla/websocket"
 	"github.com/jmoiron/sqlx"
@@ -16,13 +15,13 @@ import (
 )
 
 type Client struct {
-	TwitchWsConn  *gorillaWs.Conn
-	wsReceiveChan chan []byte
+	receiveChan     chan []byte
+	WebsocketClient *websocket.Websocket
 }
 
-func NewTwitchClient(db *sqlx.DB, done chan interface{}, interrupt chan os.Signal) (*Client, error) {
-	wsReceiveChan := make(chan []byte)
-	twitchClient, err := setup(db, wsReceiveChan, done, interrupt)
+func NewTwitchClient(db *sqlx.DB) (*Client, error) {
+	receiveChan := make(chan []byte)
+	twitchClient, err := setup(db, receiveChan)
 	if err != nil {
 		return &Client{}, err
 	}
@@ -30,7 +29,7 @@ func NewTwitchClient(db *sqlx.DB, done chan interface{}, interrupt chan os.Signa
 	return &twitchClient, nil
 }
 
-func setup(db *sqlx.DB, wsReceiveChan chan []byte, done chan interface{}, interrupt chan os.Signal) (Client, error) {
+func setup(db *sqlx.DB, receiveChan chan []byte) (Client, error) {
 	var twitchWsConn *gorillaWs.Conn
 
 	// get oauth token
@@ -59,11 +58,7 @@ func setup(db *sqlx.DB, wsReceiveChan chan []byte, done chan interface{}, interr
 		}
 		go oauthServer.ListenAndServe()
 		for responseCode != http.StatusOK {
-			select {
-			case <-interrupt:
-				return Client{}, nil
-			default:
-			}
+			// TODO stop()
 		}
 		oauthServer.Shutdown(context.Background())
 		twitchOauthToken, err = twitchOauthRepository.GetOauthToken()
@@ -93,14 +88,18 @@ func setup(db *sqlx.DB, wsReceiveChan chan []byte, done chan interface{}, interr
 	if err != nil {
 		logrus.Fatal("Error connecting to Websocket Server:", err)
 	}
-	websocket.NewWebsocketClient(twitchWsConn, twitchOauthToken.AccessToken, twitchTopics, wsReceiveChan)
+	WebsocketClient, err := websocket.NewWebsocketClient(twitchWsConn, twitchOauthToken.AccessToken, twitchTopics, receiveChan)
+	if err != nil {
+		logrus.Error("Failed to setup websocket client:", err)
+		return Client{}, err
+	}
 
 	return Client{
-		twitchWsConn,
-		wsReceiveChan,
+		receiveChan,
+		WebsocketClient,
 	}, nil
 }
 
-func (tc Client) Stop(done chan interface{}) {
-	tc.Stop(done)
+func (tc Client) Stop() {
+	tc.WebsocketClient.Stop()
 }
