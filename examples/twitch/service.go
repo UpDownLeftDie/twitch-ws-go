@@ -1,11 +1,13 @@
-package twitch
+package main
 
 import (
 	"github.com/sirupsen/logrus"
 )
 
-func (tc Client) Start(wsEvents chan []byte) {
+// @param db *sqlx.DB
+func (tc Client) Start(args ...*interface{}) {
 	logrus.Println("Starting Twitch Client...")
+
 	go func() {
 		for {
 			msg := tc.getWSMessage()
@@ -14,6 +16,9 @@ func (tc Client) Start(wsEvents chan []byte) {
 			}
 		}
 	}()
+}
+func (tc Client) Stop() {
+	tc.WebsocketClient.Stop()
 }
 
 func (tc Client) getWSMessage() string {

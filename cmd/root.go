@@ -1,19 +1,18 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/updownleftdie/twitch-ws-go/v2/internal/twitch"
-
 	"github.com/jmoiron/sqlx"
-	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/updownleftdie/twitch-ws-go/v2/internal/configs"
+
+	"github.com/sirupsen/logrus"
+
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -36,27 +35,37 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-type Clients struct {
-	TwitchClient *twitch.Client
-	//streamLabsClient *streamLabs.Client
+func setupDefaults() map[string]interface{} {
+	viper.AutomaticEnv()
+	defaults := map[string]interface{}{
+		"APP_ENV":      "local",
+		"PORT":         3000,
+		"CALLBACK_URL": fmt.Sprintf("http://localhost:%d/callback", 8080),
+
+		"DB.MAX_CONNECTIONS":  5,
+		"DB.SSLMODE":          "disable",
+		"DB.SQLX_DRIVER_NAME": "sqlite3",
+		"DB.SQLITE_FILE":      "twitch-ws-go.db",
+
+		"TWITCH.BASE_API_URL": "https://id.twitch.tv",
+		"TWITCH.WS_URL":       "wss://pubsub-edge.twitch.tv",
+	}
+	for key, value := range defaults {
+		viper.SetDefault(key, value)
+	}
+	return defaults
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute() {
+func Execute() (*sqlx.DB, error) {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-}
-
-func setup(ctx context.Context) (*Clients, error) {
-	// setup environment variables
-	configs.InitializeViper()
-	setupDefaults()
 
 	var err error
-	host, err = os.Hostname()
+	host, err := os.Hostname()
 	if err != nil {
 		logrus.Panicln("unable to get Hostname", err)
 		return nil, err
@@ -71,6 +80,19 @@ func setup(ctx context.Context) (*Clients, error) {
 		"Githash":   Githash,
 		"Host":      host,
 	}).Info("Service Startup")
+
+	db, err := setupDb()
+	if err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+func setupDb() (*sqlx.DB, error) {
+	// setup environment variables
+	configs.InitializeViper()
+	setupDefaults()
 
 	// setup db
 	db, err := getDB(
@@ -92,36 +114,7 @@ func setup(ctx context.Context) (*Clients, error) {
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	twitchClient, err := twitch.NewTwitchClient(db)
-	if err != nil {
-		logrus.Error("Error creating TwitchClient: ", err)
-		return nil, err
-	}
-
-	return &Clients{
-		twitchClient,
-	}, nil
-}
-
-func setupDefaults() map[string]interface{} {
-	viper.AutomaticEnv()
-	defaults := map[string]interface{}{
-		"APP_ENV":      "local",
-		"PORT":         3000,
-		"CALLBACK_URL": fmt.Sprintf("http://localhost:%d/callback", 8080),
-
-		"DB.MAX_CONNECTIONS":  5,
-		"DB.SSLMODE":          "disable",
-		"DB.SQLX_DRIVER_NAME": "sqlite3",
-		"DB.SQLITE_FILE":      "twitch-ws-go.db",
-
-		"TWITCH.BASE_API_URL": "https://id.twitch.tv",
-		"TWITCH.WS_URL":       "wss://pubsub-edge.twitch.tv",
-	}
-	for key, value := range defaults {
-		viper.SetDefault(key, value)
-	}
-	return defaults
+	return db, nil
 }
 
 func getDB(host string, port string, user string, password string, dbname string, sslmode string, serviceName string, driverName string, sqliteFilePath string) (*sqlx.DB, error) {

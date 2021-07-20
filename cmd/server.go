@@ -1,9 +1,14 @@
 package cmd
 
 import (
-	"context"
+	"log"
 	"os"
+	"os/exec"
 	"os/signal"
+
+	"github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/go-plugin"
+	"github.com/updownleftdie/twitch-ws-go/v2/shared"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -17,38 +22,65 @@ var serverCmd = &cobra.Command{
 	Run:   runServer,
 }
 
-type Service interface {
-	Start(wsEvents chan []byte)
-	Stop()
-}
-
 func runServer(cmd *cobra.Command, args []string) {
-	ctx, ctxCancel := context.WithCancel(context.Background())
+	//ctx, ctxCancel := context.WithCancel(context.Background())
 	done := make(chan interface{})
-	wsEvents := make(chan []byte)
+	eventChan := make(chan []byte)
 	interrupt := make(chan os.Signal, 1)
+	defer close(eventChan)
+	defer close(interrupt)
 	signal.Notify(interrupt, os.Interrupt)
 
-	clients, err := setup(ctx)
+	db, err := Execute()
+	//if err != nil {
+	//	logrus.Error("Failed to setup DB: ", err)
+	//	os.Exit(1)
+	//}
+
+	logger := hclog.New(&hclog.LoggerOptions{
+		Name:   "plugin",
+		Output: os.Stdout,
+		Level:  hclog.Debug,
+	})
+
+	// We're a host. Start by launching the plugin process.
+	client := plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig:  shared.Handshake,
+		Plugins:          shared.PluginMap,
+		Cmd:              exec.Command("../plugins/**"),
+		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+		Logger:           logger,
+	})
+	defer client.Kill()
+
+	rpcClient, err := client.Client()
 	if err != nil {
-		logrus.Error("Failed to start server: ", err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
-	services := []Service{clients.TwitchClient}
-	for _, service := range services {
-		go service.Start(wsEvents)
+
+	// Request the plugin
+	raw, err := rpcClient.Dispense("twitch")
+	if err != nil {
+		log.Fatal(err)
 	}
+	twitchPlugin := raw.(shared.CustomPlugin)
+	twitchPlugin.Start(db)
+
+	//for _, plugin := range plugins {
+	//	go plugin.Start(db, eventChan)
+	//}
 
 	go func() {
 		for {
 			select {
 			case <-interrupt:
 				for range interrupt {
-					logrus.Warnln("Interrupt detected, flushing service")
-					for _, service := range services {
-						service.Stop()
-					}
-					ctxCancel()
+					logrus.Warnln("Interrupt detected, stopping plugins")
+					twitchPlugin.Stop()
+					//for _, plugin := range plugins {
+					//	plugin.Stop()
+					//}
+					//ctxCancel()
 					done <- "done"
 				}
 			}

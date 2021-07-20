@@ -1,25 +1,44 @@
-package twitch
+package main
 
 import (
 	"context"
 	"fmt"
 	"net/http"
 
-	gorillaWs "github.com/gorilla/websocket"
+	"github.com/hashicorp/go-plugin"
+
+	"github.com/gorilla/websocket"
 	"github.com/jmoiron/sqlx"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/updownleftdie/twitch-ws-go/v2/internal/oauth"
-	"github.com/updownleftdie/twitch-ws-go/v2/internal/websocket"
+	websocketClient "github.com/updownleftdie/twitch-ws-go/v2/internal/websocket"
+	"github.com/updownleftdie/twitch-ws-go/v2/shared"
 	"golang.org/x/oauth2/twitch"
 )
 
 type Client struct {
 	receiveChan     chan []byte
-	WebsocketClient *websocket.Websocket
+	WebsocketClient *websocketClient.Websocket
 }
 
-func NewTwitchClient(db *sqlx.DB) (*Client, error) {
+func Setup(db *sqlx.DB) {
+	twitchPlugin, err := newTwitchClient(db)
+	if err != nil {
+		logrus.Panicln("error setting Twitch Plugin", err)
+	}
+	plugin.Serve(&plugin.ServeConfig{
+		HandshakeConfig: shared.Handshake,
+		Plugins: map[string]plugin.Plugin{
+			"twitch": &shared.CustomPlugin{Impl: twitchPlugin},
+		},
+
+		// A non-nil value here enables gRPC serving for this plugin...
+		GRPCServer: plugin.DefaultGRPCServer,
+	})
+}
+
+func newTwitchClient(db *sqlx.DB) (*Client, error) {
 	receiveChan := make(chan []byte)
 	twitchClient, err := setup(db, receiveChan)
 	if err != nil {
@@ -30,7 +49,7 @@ func NewTwitchClient(db *sqlx.DB) (*Client, error) {
 }
 
 func setup(db *sqlx.DB, receiveChan chan []byte) (Client, error) {
-	var twitchWsConn *gorillaWs.Conn
+	var twitchWsConn *websocket.Conn
 
 	// get oauth token
 	twitchOauthConfig := oauth.NewOAuthConfig(
@@ -84,11 +103,11 @@ func setup(db *sqlx.DB, receiveChan chan []byte) (Client, error) {
 
 	// setup websocket clients
 	twitchTopics := viper.GetStringSlice("TWITCH.TOPICS")
-	twitchWsConn, _, err = gorillaWs.DefaultDialer.Dial("wss://pubsub-edge.twitch.tv", nil)
+	twitchWsConn, _, err = websocket.DefaultDialer.Dial("wss://pubsub-edge.twitch.tv", nil)
 	if err != nil {
 		logrus.Fatal("Error connecting to Websocket Server:", err)
 	}
-	WebsocketClient, err := websocket.NewWebsocketClient(twitchWsConn, twitchOauthToken.AccessToken, twitchTopics, receiveChan)
+	WebsocketClient, err := websocketClient.NewWebsocketClient(twitchWsConn, twitchOauthToken.AccessToken, twitchTopics, receiveChan)
 	if err != nil {
 		logrus.Error("Failed to setup websocket client:", err)
 		return Client{}, err
@@ -98,8 +117,4 @@ func setup(db *sqlx.DB, receiveChan chan []byte) (Client, error) {
 		receiveChan,
 		WebsocketClient,
 	}, nil
-}
-
-func (tc Client) Stop() {
-	tc.WebsocketClient.Stop()
 }
