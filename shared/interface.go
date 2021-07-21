@@ -25,7 +25,7 @@ var PluginMap = map[string]plugin.Plugin{
 
 // Service is the interface that we're exposing as a plugin.
 type Service interface {
-	Start(args ...interface{})
+	Start()
 	Stop()
 }
 
@@ -40,7 +40,7 @@ type PluginRPCServer struct {
 }
 
 func (s *PluginRPCServer) Start(args interface{}, resp *string) error {
-	s.Impl.Start(args)
+	s.Impl.Start()
 	*resp = "Plugin started"
 	return nil
 }

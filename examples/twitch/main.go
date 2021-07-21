@@ -18,37 +18,25 @@ import (
 )
 
 type Client struct {
-	receiveChan     chan []byte
 	WebsocketClient *websocketClient.Websocket
+	receiveChan     chan []byte
+	db 				*sqlx.DB
 }
 
-func Setup(db *sqlx.DB) {
-	twitchPlugin, err := newTwitchClient(db)
-	if err != nil {
-		logrus.Panicln("error setting Twitch Plugin", err)
-	}
+
+func main() {
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: shared.Handshake,
-		Plugins: map[string]plugin.Plugin{
-			"twitch": &shared.CustomPlugin{Impl: twitchPlugin},
-		},
+		//Plugins: map[string]plugin.Plugin{
+		//	"twitch": &shared.CustomPlugin{Impl: },
+		//},
 
 		// A non-nil value here enables gRPC serving for this plugin...
 		GRPCServer: plugin.DefaultGRPCServer,
 	})
 }
 
-func newTwitchClient(db *sqlx.DB) (*Client, error) {
-	receiveChan := make(chan []byte)
-	twitchClient, err := setup(db, receiveChan)
-	if err != nil {
-		return &Client{}, err
-	}
-
-	return &twitchClient, nil
-}
-
-func setup(db *sqlx.DB, receiveChan chan []byte) (Client, error) {
+func setup(db *sqlx.DB, receiveChan chan []byte) (*websocketClient.Websocket, error) {
 	var twitchWsConn *websocket.Conn
 
 	// get oauth token
@@ -64,7 +52,7 @@ func setup(db *sqlx.DB, receiveChan chan []byte) (Client, error) {
 	twitchOauthToken, err := twitchOauthRepository.GetOauthToken()
 	if err != nil {
 		logrus.Error("Error getting twitch token from DB: ", err)
-		return Client{}, err
+		return &websocketClient.Websocket{}, err
 	} else if twitchOauthToken.ClientID == "" {
 		port := viper.GetInt("PORT")
 		logrus.Errorf("No twitch oauth token. Auth first: http://localhost:%d", port)
@@ -83,7 +71,7 @@ func setup(db *sqlx.DB, receiveChan chan []byte) (Client, error) {
 		twitchOauthToken, err = twitchOauthRepository.GetOauthToken()
 		if err != nil {
 			logrus.Error("Error getting twitch token from DB: ", err)
-			return Client{}, err
+			return &websocketClient.Websocket{}, err
 		}
 	}
 
@@ -110,11 +98,14 @@ func setup(db *sqlx.DB, receiveChan chan []byte) (Client, error) {
 	WebsocketClient, err := websocketClient.NewWebsocketClient(twitchWsConn, twitchOauthToken.AccessToken, twitchTopics, receiveChan)
 	if err != nil {
 		logrus.Error("Failed to setup websocket client:", err)
-		return Client{}, err
+		return &websocketClient.Websocket{}, err
 	}
 
-	return Client{
-		receiveChan,
-		WebsocketClient,
-	}, nil
+	return WebsocketClient, nil
+}
+
+func getWSMessage(receiveChan <-chan []byte) string {
+msg := <-receiveChan
+logrus.Debugf("Received Twitch message: %s\n", string(msg))
+return string(msg)
 }

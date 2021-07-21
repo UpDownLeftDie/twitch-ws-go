@@ -17,7 +17,7 @@ import (
 // serverCmd represents the server command
 var serverCmd = &cobra.Command{
 	Use:   "server",
-	Short: "http server to allow Oauth Authorization",
+	Short: "TODO set this description",
 	Long:  ``,
 	Run:   runServer,
 }
@@ -25,17 +25,9 @@ var serverCmd = &cobra.Command{
 func runServer(cmd *cobra.Command, args []string) {
 	//ctx, ctxCancel := context.WithCancel(context.Background())
 	done := make(chan interface{})
-	eventChan := make(chan []byte)
 	interrupt := make(chan os.Signal, 1)
-	defer close(eventChan)
 	defer close(interrupt)
 	signal.Notify(interrupt, os.Interrupt)
-
-	db, err := Execute()
-	//if err != nil {
-	//	logrus.Error("Failed to setup DB: ", err)
-	//	os.Exit(1)
-	//}
 
 	logger := hclog.New(&hclog.LoggerOptions{
 		Name:   "plugin",
@@ -46,8 +38,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	// We're a host. Start by launching the plugin process.
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig:  shared.Handshake,
-		Plugins:          shared.PluginMap,
-		Cmd:              exec.Command("../plugins/**"),
+		Cmd:              exec.Command("./examples/twitch/plugin-twitch"),
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 		Logger:           logger,
 	})
@@ -64,7 +55,8 @@ func runServer(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 	twitchPlugin := raw.(shared.CustomPlugin)
-	twitchPlugin.Start(db)
+	twitchPlugin.Impl.Start()
+
 
 	//for _, plugin := range plugins {
 	//	go plugin.Start(db, eventChan)
@@ -76,13 +68,13 @@ func runServer(cmd *cobra.Command, args []string) {
 			case <-interrupt:
 				for range interrupt {
 					logrus.Warnln("Interrupt detected, stopping plugins")
-					twitchPlugin.Stop()
+					twitchPlugin.Impl.Stop()
 					//for _, plugin := range plugins {
 					//	plugin.Stop()
 					//}
-					//ctxCancel()
-					done <- "done"
+					//ctxCancel(
 				}
+				done <- "done"
 			}
 		}
 	}()
@@ -94,7 +86,6 @@ func runServer(cmd *cobra.Command, args []string) {
 			os.Exit(0)
 		}
 	}
-
 }
 
 func init() {
