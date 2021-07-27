@@ -6,6 +6,7 @@ import (
 )
 
 func (tc *Client) Start() {
+	logrus.Println("Starting Twitch Client...")
 	receiveChan := make(chan []byte)
 	db, err := plugins.SetupDB()
 	if err != nil {
@@ -18,7 +19,6 @@ func (tc *Client) Start() {
 	tc.WebsocketClient = websocketClient
 	tc.receiveChan = receiveChan
 	tc.db = db
-	logrus.Println("Starting Twitch Client...")
 
 	go func() {
 		for {
@@ -32,4 +32,3 @@ func (tc *Client) Start() {
 func (tc *Client) Stop() {
 	tc.WebsocketClient.Stop()
 }
-

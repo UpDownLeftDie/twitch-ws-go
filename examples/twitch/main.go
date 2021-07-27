@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+
+	"github.com/hashicorp/go-hclog"
 
 	"github.com/hashicorp/go-plugin"
 
@@ -20,11 +23,18 @@ import (
 type Client struct {
 	WebsocketClient *websocketClient.Websocket
 	receiveChan     chan []byte
-	db 				*sqlx.DB
+	db              *sqlx.DB
 }
 
-
 func main() {
+	logger := hclog.New(&hclog.LoggerOptions{
+		Level:      hclog.Trace,
+		Output:     os.Stderr,
+		JSONFormat: true,
+	})
+
+	logger.Debug("message from plugin", "twitch")
+
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: shared.Handshake,
 		//Plugins: map[string]plugin.Plugin{
@@ -105,7 +115,7 @@ func setup(db *sqlx.DB, receiveChan chan []byte) (*websocketClient.Websocket, er
 }
 
 func getWSMessage(receiveChan <-chan []byte) string {
-msg := <-receiveChan
-logrus.Debugf("Received Twitch message: %s\n", string(msg))
-return string(msg)
+	msg := <-receiveChan
+	logrus.Debugf("Received Twitch message: %s\n", string(msg))
+	return string(msg)
 }
