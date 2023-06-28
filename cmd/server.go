@@ -8,7 +8,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
-	"github.com/updownleftdie/twitch-ws-go/v2/shared"
+	"github.com/updownleftdie/twitch-ws-go/v3/shared"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"

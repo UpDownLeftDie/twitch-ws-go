@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/updownleftdie/twitch-ws-go/v2/cmd"
+	"github.com/updownleftdie/twitch-ws-go/v3/cmd"
 )
 
 func main() {

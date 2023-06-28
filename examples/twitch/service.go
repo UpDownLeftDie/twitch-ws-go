@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/sirupsen/logrus"
-	"github.com/updownleftdie/twitch-ws-go/v2/plugins"
+	"github.com/updownleftdie/twitch-ws-go/v3/plugins"
 )
 
 func (tc *Client) Start() {

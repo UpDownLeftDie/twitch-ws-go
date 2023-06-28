@@ -5,13 +5,13 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/updownleftdie/twitch-ws-go/v2/shared"
+	"github.com/updownleftdie/twitch-ws-go/v3/shared"
 )
 
 var info = shared.LogrusInfo{
-	Version: "None",
+	Version:    "None",
 	Buildstamp: "None",
-	Githash: "None",
+	Githash:    "None",
 }
 
 // rootCmd represents the base command when called without any subcommands

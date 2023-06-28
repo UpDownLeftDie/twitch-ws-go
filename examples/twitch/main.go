@@ -14,9 +14,9 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"github.com/updownleftdie/twitch-ws-go/v2/internal/oauth"
-	websocketClient "github.com/updownleftdie/twitch-ws-go/v2/internal/websocket"
-	"github.com/updownleftdie/twitch-ws-go/v2/shared"
+	"github.com/updownleftdie/twitch-ws-go/v3/internal/oauth"
+	websocketClient "github.com/updownleftdie/twitch-ws-go/v3/internal/websocket"
+	"github.com/updownleftdie/twitch-ws-go/v3/shared"
 	"golang.org/x/oauth2/twitch"
 )
 

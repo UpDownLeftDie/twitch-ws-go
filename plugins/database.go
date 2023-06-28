@@ -8,8 +8,8 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"github.com/updownleftdie/twitch-ws-go/v2/internal/configs"
-	"github.com/updownleftdie/twitch-ws-go/v2/shared"
+	"github.com/updownleftdie/twitch-ws-go/v3/internal/configs"
+	"github.com/updownleftdie/twitch-ws-go/v3/shared"
 )
 
 func SetupDB() (*sqlx.DB, error) {
