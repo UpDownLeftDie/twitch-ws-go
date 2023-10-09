@@ -7,7 +7,6 @@
     "mattn",
     "scclient",
     "sqlite",
-    "sqlx",
-    "updownleftbot"
+    "sqlx"
   ]
 }
